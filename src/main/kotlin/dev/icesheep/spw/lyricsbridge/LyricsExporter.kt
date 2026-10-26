@@ -46,6 +46,14 @@ internal object LyricsExporter {
     /** onPositionUpdated 计数，用于每 5 秒一次的位置校准 */
     private var positionTick = 0L
 
+    /** Noctalia 推送开关（配置界面实时控制） */
+    @Volatile
+    private var noctaliaPushEnabled = true
+
+    fun setNoctaliaPushEnabled(enabled: Boolean) {
+        noctaliaPushEnabled = enabled
+    }
+
     /** 缓存目录：遵循 XDG 规范，跨用户目录可写 */
     private val cacheDir: Path by lazy {
         val base = System.getenv("XDG_CACHE_HOME")
@@ -112,10 +120,12 @@ internal object LyricsExporter {
                 // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
             }
             // 歌词加载完成即推 Noctalia Lyrics（external 源在等这条推送）
-            NoctaliaPusher.pushFull(
-                title, artist, album, durationMs,
-                snapshot, lastPositionMs, lastPlaying
-            )
+            if (noctaliaPushEnabled) {
+                NoctaliaPusher.pushFull(
+                    title, artist, album, durationMs,
+                    snapshot, lastPositionMs, lastPlaying
+                )
+            }
         }
     }
 
@@ -134,12 +144,14 @@ internal object LyricsExporter {
     /** 暂停/恢复（onIsPlayingChanged）：更新状态并立即推送修正 widget 基线 */
     fun onPlayingChanged(playing: Boolean) {
         lastPlaying = playing
+        if (!noctaliaPushEnabled) return
         submit { NoctaliaPusher.pushState(lastPositionMs, playing) }
     }
 
     /** 进度跳转（onSeekTo）：更新位置并立即推送 */
     fun onSeek(position: Long) {
         lastPositionMs = position
+        if (!noctaliaPushEnabled) return
         submit { NoctaliaPusher.pushState(position, lastPlaying) }
     }
 
@@ -150,7 +162,7 @@ internal object LyricsExporter {
     fun onPositionUpdated(position: Long) {
         lastPositionMs = position
         positionTick++
-        if (positionTick % 5L != 0L || !lastPlaying) return
+        if (positionTick % 5L != 0L || !lastPlaying || !noctaliaPushEnabled) return
         submit { NoctaliaPusher.pushState(position, true) }
     }
 

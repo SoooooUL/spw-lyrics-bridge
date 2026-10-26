@@ -1,0 +1,17 @@
+{
+  "configs": [
+    {
+      "title": "通用设置",
+      "config": "config.json",
+      "preferences": [
+        {
+          "type": "switch",
+          "key": "push.noctalia",
+          "title": "推送歌词到 Noctalia Lyrics",
+          "summary": "换曲/播放事件时通过 noctalia msg 向 Noctalia 的 Lyrics 插件（external 源）推送歌词。未使用该插件时可关闭，避免周期性进程调用",
+          "default_value": true
+        }
+      ]
+    }
+  ]
+}
