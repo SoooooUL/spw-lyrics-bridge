@@ -21,9 +21,8 @@ kotlin {
 
     compilerOptions {
         jvmTarget = JvmTarget.JVM_25
-        // API 中接口带 JVM 默认实现（如 Playback.getLyricsLines 的旧宿主兜底），
-        // 与宿主保持一致的默认方法语义
-        freeCompilerArgs.add("-Xjvm-default=all")
+        // 无需 jvm-default：本插件只实现宿主接口并继承其默认方法，
+        // 默认实现的编译形态由 API 模块自身决定
     }
 }
 
@@ -43,7 +42,7 @@ spmod {
     PluginVersion = "1.0.0"
     PluginProvider = "ice_sheep"
     PluginName = "歌词桥"
-    PluginDescription = "导出当前歌曲的完整歌词时间轴到本地 JSON 文件（不开端口、无网络监听），供 Noctalia 等外部组件读取"
+    PluginDescription = "导出当前歌曲歌词时间轴为本地 JSON 文件，供外部组件读取"
     PluginHasConfig = false
     // 仅需读取曲库（当前歌曲元数据）；不申请写库与 Hook 权限
     PluginPermissions = listOf(PluginPermission.LIBRARY_READ)
