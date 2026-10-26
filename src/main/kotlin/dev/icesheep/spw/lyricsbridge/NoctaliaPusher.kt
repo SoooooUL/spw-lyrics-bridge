@@ -30,8 +30,15 @@ internal object NoctaliaPusher {
     /**
      * 换曲/歌词加载完成后的完整推送。
      *
-     * [positionMs] 当前播放位置（毫秒）；[durationMs] 曲长（毫秒）。
+     * [positionMs] 当前播放位置（毫秒），[durationMs] 曲长（毫秒）。
      * [lyricsLines] 为宿主解析的歌词时间轴，转换成 Lyrics 的行模型后推送。
+     *
+     * 单位约定（Lyrics 文档与源码一致）：track.duration 与 position 为微秒，
+     * 歌词时间戳为毫秒。传毫秒进 position 会被 widget 再除以 1000，
+     * 表现为永远停在前几行。
+     *
+     * [playing] 为 null 时不带该字段，让 widget 保留原有播放状态
+     * （插件启动初期可能还没收到过播放状态事件）。
      */
     fun pushFull(
         title: String?,
@@ -40,7 +47,7 @@ internal object NoctaliaPusher {
         durationMs: Long,
         lyricsLines: List<LyricsLine>,
         positionMs: Long,
-        playing: Boolean
+        playing: Boolean?
     ) {
         val sb = StringBuilder(8 * 1024)
         sb.append("{\"track\":{")
@@ -50,15 +57,24 @@ internal object NoctaliaPusher {
         // Lyrics 的 trackKey 将 duration 视为微秒
         sb.append(",\"duration\":").append(durationMs * 1000)
         sb.append(",\"playerInstance\":\"salt-player\"")
-        sb.append("},\"position\":").append(positionMs)
-        sb.append(",\"playing\":").append(playing)
+        sb.append("},\"position\":").append(positionMs * 1000)
+        if (playing != null) sb.append(",\"playing\":").append(playing)
         sb.append(",\"lines\":[").append(buildLinesJson(lyricsLines)).append("]}")
         send(sb.toString())
     }
 
-    /** 暂停/恢复/seek 的小状态包。 */
-    fun pushState(positionMs: Long, playing: Boolean) {
-        send("{\"position\":$positionMs,\"playing\":$playing}")
+    /** 暂停/恢复/seek 的状态包（position 微秒；playing 为 null 时不带该字段）。 */
+    fun pushState(positionMs: Long, playing: Boolean?) {
+        val sb = StringBuilder(64)
+        sb.append("{\"position\":").append(positionMs * 1000)
+        if (playing != null) sb.append(",\"playing\":").append(playing)
+        sb.append('}')
+        send(sb.toString())
+    }
+
+    /** 播放中的周期位置校准：只推 position，不动 playing，避免污染 widget 状态。 */
+    fun pushPosition(positionMs: Long) {
+        send("{\"position\":${positionMs * 1000}}")
     }
 
     /**

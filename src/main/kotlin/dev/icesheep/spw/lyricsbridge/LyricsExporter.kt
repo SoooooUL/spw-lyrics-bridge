@@ -36,12 +36,12 @@ internal object LyricsExporter {
     @Volatile
     private var executor: ExecutorService? = null
 
-    /** 最近一次已知的播放位置（毫秒）与播放状态，供推送 payload 使用 */
+    /** 最近一次已知的播放位置（毫秒）与播放状态（null=尚未收到状态事件） */
     @Volatile
     private var lastPositionMs = 0L
 
     @Volatile
-    private var lastPlaying = false
+    private var lastPlaying: Boolean? = null
 
     /** onPositionUpdated 计数，用于每 5 秒一次的位置校准 */
     private var positionTick = 0L
@@ -157,13 +157,14 @@ internal object LyricsExporter {
 
     /**
      * 每秒位置更新（onPositionUpdated）：仅更新缓存；
-     * 播放中每 5 秒推送一次校准，修正 widget 本地插值的累计漂移。
+     * 每 5 秒推送一次纯位置校准，修正 widget 本地插值的累计漂移。
+     * 不依赖播放状态（暂停时 widget 自身不插值，多推一次无害）。
      */
     fun onPositionUpdated(position: Long) {
         lastPositionMs = position
         positionTick++
-        if (positionTick % 5L != 0L || !lastPlaying || !noctaliaPushEnabled) return
-        submit { NoctaliaPusher.pushState(position, true) }
+        if (positionTick % 5L != 0L || !noctaliaPushEnabled) return
+        submit { NoctaliaPusher.pushPosition(position) }
     }
 
     /**
