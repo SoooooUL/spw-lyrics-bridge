@@ -45,3 +45,12 @@ Salt Player for Windows/Linux（SPW）插件：把当前歌曲的完整歌词时
 ## 宿主要求
 
 SPW 1.19.0+（完整歌词时间轴 API 自 0.1.0-dev21 / 宿主 1.19.0 起提供）。
+
+## 许可证
+
+[Apache-2.0](LICENSE)——与上游 [spw-workshop-api](https://github.com/Moriafly/spw-workshop-api) 一致。
+
+## 声明
+
+本项目为 **vibe coding** 产物：代码由 AI 辅助生成，作者负责需求设计、代码审核与真机测试。Salt Player 及 SPW Workshop API 版权归 [Moriafly](https://github.com/Moriafly) 所有，本项目与其无隶属关系。
+

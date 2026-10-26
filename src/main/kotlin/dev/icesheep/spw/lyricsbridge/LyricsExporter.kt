@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * 歌词导出器：把当前歌曲的完整歌词时间轴写成 JSON 文件，供外部进程（Noctalia 插件）读取。
@@ -76,28 +77,33 @@ internal object LyricsExporter {
         ensureStarted()
         // 宿主给的列表不可修改且可能被复用，先复制快照再跨线程
         val snapshot = ArrayList(lyricsLines)
-        executor?.execute {
-            var title: String? = null
-            var artist: String? = null
-            var durationMs = 0L
-            try {
-                // 需要 LIBRARY_READ；阻塞查询放在本后台线程执行
-                WorkshopApi.playback.getCurrentMediaItem()?.let { item ->
-                    title = item.title
-                    artist = item.artist
-                    durationMs = item.duration
+        try {
+            executor?.execute {
+                var title: String? = null
+                var artist: String? = null
+                var durationMs = 0L
+                try {
+                    // 需要 LIBRARY_READ；阻塞查询放在本后台线程执行
+                    WorkshopApi.playback.getCurrentMediaItem()?.let { item ->
+                        title = item.title
+                        artist = item.artist
+                        durationMs = item.duration
+                    }
+                } catch (denied: PluginPermissionDeniedException) {
+                    // 未声明或未授权曲库读取：仍导出歌词，元数据留空，
+                    // 由读取方从 MPRIS 元数据自行对齐
+                } catch (e: Exception) {
+                    // 元数据查询的其他失败同样降级，不阻断歌词导出
                 }
-            } catch (denied: PluginPermissionDeniedException) {
-                // 未声明或未授权曲库读取：仍导出歌词，元数据留空，
-                // 由读取方从 MPRIS 元数据自行对齐
-            } catch (e: Exception) {
-                // 元数据查询的其他失败同样降级，不阻断歌词导出
+                try {
+                    writeAtomically(buildJson(snapshot, title, artist, durationMs))
+                } catch (e: Exception) {
+                    // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
+                }
             }
-            try {
-                writeAtomically(buildJson(snapshot, title, artist, durationMs))
-            } catch (e: Exception) {
-                // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
-            }
+        } catch (rejected: RejectedExecutionException) {
+            // stop() 与本调用竞态：写盘线程已关闭，静默丢弃本次任务；
+            // 重新启用后宿主会重放歌词，数据不会丢失
         }
     }
 
