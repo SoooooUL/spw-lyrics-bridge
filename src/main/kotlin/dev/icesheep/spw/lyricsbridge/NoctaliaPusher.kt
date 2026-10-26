@@ -1,0 +1,129 @@
+package dev.icesheep.spw.lyricsbridge
+
+import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint.LyricsLine
+import java.util.concurrent.TimeUnit
+
+/**
+ * Noctalia Lyrics 插件推送桥。
+ *
+ * Lyrics（h465855hgg/lyrics）的 external 歌词源是被动的：它不做 MPRIS 轮询，
+ * 只监听 Noctalia 的 IPC 命令（noctalia msg）。本桥在歌词变化/播放事件时，
+ * 用 noctalia msg 把数据推给它的 service entry；widget 端按 33ms 本地插值
+ * 渲染，因此低频推送即可平滑显示。
+ *
+ * 推送时机（由 LyricsExportExtension 驱动，统一排队到写盘线程串行执行）：
+ * - 换曲/歌词加载完成：完整 payload（track + lines + position + playing）
+ * - 暂停/恢复、seek：小状态包（position + playing）
+ * - 播放中每 5 秒一次 position 校准
+ *
+ * payload 单位约定（与 Lyrics 源码对齐）：
+ * - track.duration 为微秒（Lyrics 的 trackKey 按 μs→s 折算）
+ * - position 与歌词时间戳为毫秒
+ * - lines[].chars 与 text 的 Unicode 字符一一对应（卡拉 OK 逐字着色）
+ *
+ * noctalia msg 失败（未安装/插件未启用）时静默忽略——歌词文件仍照常落盘。
+ */
+internal object NoctaliaPusher {
+
+    private const val TARGET = "h465855hgg/lyrics:service"
+
+    /**
+     * 换曲/歌词加载完成后的完整推送。
+     *
+     * [positionMs] 当前播放位置（毫秒）；[durationMs] 曲长（毫秒）。
+     * [lyricsLines] 为宿主解析的歌词时间轴，转换成 Lyrics 的行模型后推送。
+     */
+    fun pushFull(
+        title: String?,
+        artist: String?,
+        album: String?,
+        durationMs: Long,
+        lyricsLines: List<LyricsLine>,
+        positionMs: Long,
+        playing: Boolean
+    ) {
+        val sb = StringBuilder(8 * 1024)
+        sb.append("{\"track\":{")
+        sb.append("\"title\":").append(title?.let(LyricsExporter::jsonString) ?: "\"\"")
+        sb.append(",\"artist\":").append(artist?.let(LyricsExporter::jsonString) ?: "\"\"")
+        sb.append(",\"album\":").append(album?.let(LyricsExporter::jsonString) ?: "\"\"")
+        // Lyrics 的 trackKey 将 duration 视为微秒
+        sb.append(",\"duration\":").append(durationMs * 1000)
+        sb.append(",\"playerInstance\":\"salt-player\"")
+        sb.append("},\"position\":").append(positionMs)
+        sb.append(",\"playing\":").append(playing)
+        sb.append(",\"lines\":[").append(buildLinesJson(lyricsLines)).append("]}")
+        send(sb.toString())
+    }
+
+    /** 暂停/恢复/seek 的小状态包。 */
+    fun pushState(positionMs: Long, playing: Boolean) {
+        send("{\"position\":$positionMs,\"playing\":$playing}")
+    }
+
+    /**
+     * 把宿主歌词时间轴转换为 Lyrics 行模型 JSON。
+     *
+     * Lyrics 行：{ time, duration, text, translation?, chars? }
+     * chars 为每字开始时间数组，按 Unicode 码点与 text 一一对应；
+     * cells 拼接与整行文本的码点数不一致时放弃 chars（退化为整行进度着色）。
+     */
+    private fun buildLinesJson(lyricsLines: List<LyricsLine>): String {
+        val sb = StringBuilder(4 * 1024)
+        lyricsLines.forEachIndexed { index, line ->
+            if (index > 0) sb.append(',')
+            sb.append("{\"time\":").append(line.startTime)
+            sb.append(",\"duration\":").append((line.endTime - line.startTime).coerceAtLeast(0))
+            sb.append(",\"text\":").append(LyricsExporter.jsonString(line.pureMainText))
+            line.pureSubText?.let {
+                sb.append(",\"translation\":").append(LyricsExporter.jsonString(it))
+            }
+            buildCharsJson(line)?.let {
+                sb.append(",\"chars\":[").append(it).append(']')
+            }
+            sb.append('}')
+        }
+        return sb.toString()
+    }
+
+    /** 逐字时间数组；无逐字数据或码点数不匹配时返回 null。 */
+    private fun buildCharsJson(line: LyricsLine): String? {
+        val cells = line.lyricsCells
+        if (cells.isEmpty()) return null
+        val textCpCount = line.pureMainText.codePointCount(0, line.pureMainText.length)
+        if (textCpCount < 2) return null
+        val sb = StringBuilder(cells.size * 8)
+        var count = 0
+        for (cell in cells) {
+            val cpCount = cell.text.codePointCount(0, cell.text.length)
+            repeat(cpCount) {
+                if (count > 0) sb.append(',')
+                sb.append(cell.startTime)
+                count++
+            }
+        }
+        return if (count == textCpCount) sb.toString() else null
+    }
+
+    /**
+     * 执行 noctalia msg。失败（命令不存在、插件未启用、Noctalia 未运行）一律静默。
+     * 调用方需保证在后台线程（当前为写盘线程）串行执行，避免并发 fork。
+     */
+    private fun send(payload: String) {
+        try {
+            val process = ProcessBuilder(
+                "noctalia", "msg", "plugin", TARGET, "all", "push-state", payload
+            ).apply {
+                // 屏蔽 noctalia 的输出，避免污染宿主日志
+                redirectError(ProcessBuilder.Redirect.DISCARD)
+                redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            }.start()
+            // IPC 正常应在毫秒级完成；超时视为 Noctalia 无响应，放弃本次推送
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+            }
+        } catch (e: Exception) {
+            // 推送失败不影响歌词文件导出与宿主运行
+        }
+    }
+}

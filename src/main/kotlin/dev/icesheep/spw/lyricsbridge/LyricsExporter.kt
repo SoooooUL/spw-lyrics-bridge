@@ -36,6 +36,16 @@ internal object LyricsExporter {
     @Volatile
     private var executor: ExecutorService? = null
 
+    /** 最近一次已知的播放位置（毫秒）与播放状态，供推送 payload 使用 */
+    @Volatile
+    private var lastPositionMs = 0L
+
+    @Volatile
+    private var lastPlaying = false
+
+    /** onPositionUpdated 计数，用于每 5 秒一次的位置校准 */
+    private var positionTick = 0L
+
     /** 缓存目录：遵循 XDG 规范，跨用户目录可写 */
     private val cacheDir: Path by lazy {
         val base = System.getenv("XDG_CACHE_HOME")
@@ -77,34 +87,71 @@ internal object LyricsExporter {
         ensureStarted()
         // 宿主给的列表不可修改且可能被复用，先复制快照再跨线程
         val snapshot = ArrayList(lyricsLines)
-        try {
-            executor?.execute {
-                var title: String? = null
-                var artist: String? = null
-                var durationMs = 0L
-                try {
-                    // 需要 LIBRARY_READ；阻塞查询放在本后台线程执行
-                    WorkshopApi.playback.getCurrentMediaItem()?.let { item ->
-                        title = item.title
-                        artist = item.artist
-                        durationMs = item.duration
-                    }
-                } catch (denied: PluginPermissionDeniedException) {
-                    // 未声明或未授权曲库读取：仍导出歌词，元数据留空，
-                    // 由读取方从 MPRIS 元数据自行对齐
-                } catch (e: Exception) {
-                    // 元数据查询的其他失败同样降级，不阻断歌词导出
+        submit {
+            var title: String? = null
+            var artist: String? = null
+            var album: String? = null
+            var durationMs = 0L
+            try {
+                // 需要 LIBRARY_READ；阻塞查询放在本后台线程执行
+                WorkshopApi.playback.getCurrentMediaItem()?.let { item ->
+                    title = item.title
+                    artist = item.artist
+                    album = item.album
+                    durationMs = item.duration
                 }
-                try {
-                    writeAtomically(buildJson(snapshot, title, artist, durationMs))
-                } catch (e: Exception) {
-                    // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
-                }
+            } catch (denied: PluginPermissionDeniedException) {
+                // 未声明或未授权曲库读取：仍导出歌词，元数据留空，
+                // 由读取方从 MPRIS 元数据自行对齐
+            } catch (e: Exception) {
+                // 元数据查询的其他失败同样降级，不阻断歌词导出
             }
-        } catch (rejected: RejectedExecutionException) {
-            // stop() 与本调用竞态：写盘线程已关闭，静默丢弃本次任务；
-            // 重新启用后宿主会重放歌词，数据不会丢失
+            try {
+                writeAtomically(buildJson(snapshot, title, artist, durationMs))
+            } catch (e: Exception) {
+                // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
+            }
+            // 歌词加载完成即推 Noctalia Lyrics（external 源在等这条推送）
+            NoctaliaPusher.pushFull(
+                title, artist, album, durationMs,
+                snapshot, lastPositionMs, lastPlaying
+            )
         }
+    }
+
+    /**
+     * 通用提交：所有写盘与推送任务排队到写盘线程串行执行。
+     * stop() 竞态导致的拒绝静默忽略。
+     */
+    private fun submit(task: () -> Unit) {
+        try {
+            executor?.execute(task)
+        } catch (rejected: RejectedExecutionException) {
+            // 线程已关闭：丢弃本次任务，重新启用后宿主会重放歌词补上
+        }
+    }
+
+    /** 暂停/恢复（onIsPlayingChanged）：更新状态并立即推送修正 widget 基线 */
+    fun onPlayingChanged(playing: Boolean) {
+        lastPlaying = playing
+        submit { NoctaliaPusher.pushState(lastPositionMs, playing) }
+    }
+
+    /** 进度跳转（onSeekTo）：更新位置并立即推送 */
+    fun onSeek(position: Long) {
+        lastPositionMs = position
+        submit { NoctaliaPusher.pushState(position, lastPlaying) }
+    }
+
+    /**
+     * 每秒位置更新（onPositionUpdated）：仅更新缓存；
+     * 播放中每 5 秒推送一次校准，修正 widget 本地插值的累计漂移。
+     */
+    fun onPositionUpdated(position: Long) {
+        lastPositionMs = position
+        positionTick++
+        if (positionTick % 5L != 0L || !lastPlaying) return
+        submit { NoctaliaPusher.pushState(position, true) }
     }
 
     /**
@@ -180,7 +227,7 @@ internal object LyricsExporter {
     }
 
     /** 手写 JSON 字符串转义，避免为几百字节引依赖第三方序列化库 */
-    private fun jsonString(value: String): String {
+    internal fun jsonString(value: String): String {
         val sb = StringBuilder(value.length + 8)
         sb.append('"')
         for (ch in value) {

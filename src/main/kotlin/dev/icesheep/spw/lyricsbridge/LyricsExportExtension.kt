@@ -4,8 +4,13 @@ import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
 import org.pf4j.Extension
 
 /**
- * 播放扩展点：只订阅歌词时间轴变化，其余回调（位置/状态/控制）一律不碰——
- * 进度同步由 MPRIS 负责，本插件不做高频数据。
+ * 播放扩展点：订阅歌词时间轴与播放事件。
+ *
+ * 数据分派原则——进度/状态的高频渲染由消费端（Noctalia Lyrics widget）
+ * 本地插值完成，本插件只推送低频事件：
+ * - 歌词时间轴变化 → 写歌词文件 + 完整推送
+ * - 暂停/恢复、seek → 小状态包（position + playing）
+ * - 每秒位置更新 → 仅缓存，播放中每 5 秒一次校准
  *
  * 宿主约定：插件启用后会异步重放当前歌词（可能为空列表）；
  * 换曲、歌词重载时先发布空列表，加载完成后发布完整解析行；
@@ -18,5 +23,17 @@ class LyricsExportExtension : PlaybackExtensionPoint {
         lyricsLines: List<PlaybackExtensionPoint.LyricsLine>
     ) {
         LyricsExporter.export(lyricsLines)
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        LyricsExporter.onPlayingChanged(isPlaying)
+    }
+
+    override fun onSeekTo(position: Long) {
+        LyricsExporter.onSeek(position)
+    }
+
+    override fun onPositionUpdated(position: Long) {
+        LyricsExporter.onPositionUpdated(position)
     }
 }

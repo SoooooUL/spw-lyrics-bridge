@@ -6,6 +6,7 @@ Salt Player for Windows/Linux（SPW）插件：把当前歌曲的完整歌词时
 
 - **不开端口**：播放状态、进度、`Seeked` 信号、封面已由 SPW 内置的 MPRIS D-Bus 接口（`org.mpris.MediaPlayer2.salt-player`）提供，本插件只补齐 MPRIS 缺失的歌词数据。
 - 换曲/歌词重载时把歌词时间轴**原子写入** `~/.cache/salt-player-spw-bridge/lyrics.json`（`XDG_CACHE_HOME` 可覆盖）；读取方按文件修改时间发现更新。
+- **Noctalia 推送**：写盘后同时把歌词转换为 [Lyrics 插件](https://noctalia.dev/plugins/community/lyrics)（`h465855hgg/lyrics`）external 源的行模型，经 `noctalia msg … push-state` 推送（换曲推完整 payload，暂停/恢复/seek 推状态，播放中每 5 秒校准一次 position）。Noctalia 未安装时静默忽略。
 - 进度同步建议：读取方用 MPRIS 的 `Position` + `Seeked` + `PlaybackStatus` 本地插值，用 `title + artist` 与文件内元数据做指纹匹配。
 
 ## 输出文件契约
