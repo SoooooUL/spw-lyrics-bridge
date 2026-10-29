@@ -46,7 +46,29 @@ sudo pacman -S playerctl python3
 - 进度同步：换曲、暂停/恢复、拖动进度条时立即对齐；播放中每 5 秒校准一次，漂移窗口 ≤5 秒
 - 关闭推送：Salt Player → 模组管理 → 歌词桥 → 配置 → 「推送歌词到 Noctalia Lyrics」关掉（歌词文件仍继续导出）
 
-### 4. 故障排查
+### 4. Steam 版 Salt Player 的容器环境（重要）
+
+经 Steam 启动的 Salt Player 会运行在 **Steam Linux Runtime（pressure-vessel）容器**内：容器里看不到宿主 `/usr` 与 `/run`，插件**无法直接执行宿主 `noctalia` CLI**（找不到二进制或 glibc 不兼容）。此时插件会自动降级：把推送内容原子写入 `~/.cache/salt-player-spw-bridge/push.out`，由宿主侧 systemd 服务转发。
+
+一次性安装转发服务（在宿主终端执行，非容器内）：
+
+```sh
+sh deploy/install.sh
+```
+
+安装内容：`~/.local/bin/spw-lyrics-push.sh` + systemd --user 的 `spw-lyrics-push.path`/`.service`。之后每次插件写 outbox，宿主都会调用 `noctalia msg` 推送。
+
+验证与卸载：
+
+```sh
+systemctl --user status spw-lyrics-push.path
+journalctl --user -u spw-lyrics-push -n 20
+systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 与脚本）
+```
+
+非 Steam 渠道（直跑）无需安装此服务，插件会直接调用 `noctalia`。
+
+### 5. 故障排查
 
 | 现象 | 检查 |
 | --- | --- |

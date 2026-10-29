@@ -1,0 +1,7 @@
+[Unit]
+Description=Forward Salt Player lyrics bridge outbox to Noctalia Lyrics
+
+[Service]
+Type=oneshot
+# 读取 outbox 并调用 noctalia msg；失败不影响插件本身
+ExecStart=%h/.local/bin/spw-lyrics-push.sh

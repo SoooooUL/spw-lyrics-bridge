@@ -122,24 +122,115 @@ internal object NoctaliaPusher {
     }
 
     /**
-     * 执行 noctalia msg。失败（命令不存在、插件未启用、Noctalia 未运行）一律静默。
+     * 执行 noctalia msg。失败时把原因输出到 stderr（宿主日志可见），
+     * 仅在失败状态变化时打印一次，避免每 5 秒刷屏。
      * 调用方需保证在后台线程（当前为写盘线程）串行执行，避免并发 fork。
      */
     private fun send(payload: String) {
+        // Steam Linux Runtime 容器内：宿主 /usr 与 /run 均不可见，
+        // 无法执行宿主 noctalia CLI，改由宿主侧 systemd 服务转发 outbox 文件
+        if (inRuntimeContainer) {
+            writeOutbox(payload)
+            return
+        }
+        var process: Process? = null
         try {
-            val process = ProcessBuilder(
-                "noctalia", "msg", "plugin", TARGET, "all", "push-state", payload
+            process = ProcessBuilder(
+                noctaliaCommand, "msg", "plugin", TARGET, "all", "push-state", payload
             ).apply {
-                // 屏蔽 noctalia 的输出，避免污染宿主日志
-                redirectError(ProcessBuilder.Redirect.DISCARD)
+                // 保留 stderr 用于诊断，stdout 丢弃
                 redirectOutput(ProcessBuilder.Redirect.DISCARD)
             }.start()
-            // IPC 正常应在毫秒级完成；超时视为 Noctalia 无响应，放弃本次推送
             if (!process.waitFor(2, TimeUnit.SECONDS)) {
                 process.destroyForcibly()
+                reportFailure("noctalia msg 超时未返回")
+                writeOutbox(payload)
+                return
+            }
+            val exit = process.exitValue()
+            if (exit == 0) {
+                if (lastFailure != null) {
+                    lastFailure = null
+                    System.err.println("[lyrics-bridge] Noctalia 推送恢复正常")
+                }
+            } else {
+                val err = runCatching {
+                    process.errorStream.bufferedReader().use { it.readText() }
+                }.getOrDefault("").trim()
+                reportFailure(
+                    "noctalia msg 退出码 $exit" +
+                        if (err.isEmpty()) "" else "：${err.take(300)}"
+                )
+                // 直连失败（如未装 Noctalia 或命令异常）时同样落 outbox，
+                // 由宿主侧服务兜底
+                writeOutbox(payload)
             }
         } catch (e: Exception) {
-            // 推送失败不影响歌词文件导出与宿主运行
+            process?.destroyForcibly()
+            reportFailure(
+                "无法执行 $noctaliaCommand：${e::class.java.simpleName}: ${e.message}"
+            )
+            writeOutbox(payload)
+        }
+    }
+
+    /**
+     * 是否运行在 Steam Linux Runtime（pressure-vessel）容器内。
+     * 容器特征：/run/host 是宿主根的部分挂载，而 /run/host/run 不存在（宿主 /run 不可见）。
+     */
+    private val inRuntimeContainer: Boolean by lazy {
+        java.nio.file.Files.exists(java.nio.file.Path.of("/run/host")) &&
+            !java.nio.file.Files.exists(java.nio.file.Path.of("/run/host/run"))
+    }
+
+    /**
+     * 把推送内容原子写入 outbox，供宿主侧 systemd 服务转发给 Noctalia。
+     * 路径：<缓存目录>/push.out
+     */
+    private fun writeOutbox(payload: String) {
+        try {
+            val dir = LyricsExporter.outputFile().parent
+            java.nio.file.Files.createDirectories(dir)
+            val target = dir.resolve("push.out")
+            val tmp = java.nio.file.Files.createTempFile(dir, "push", ".tmp")
+            try {
+                java.nio.file.Files.writeString(tmp, payload, java.nio.charset.StandardCharsets.UTF_8)
+                java.nio.file.Files.move(
+                    tmp, target,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            } finally {
+                java.nio.file.Files.deleteIfExists(tmp)
+            }
+        } catch (e: Exception) {
+            reportFailure("写入 outbox 失败：${e::class.java.simpleName}: ${e.message}")
+        }
+    }
+
+    /** 只在失败原因变化时打印，恢复时打印一次恢复日志 */
+    private fun reportFailure(reason: String) {
+        if (lastFailure == reason) return
+        lastFailure = reason
+        System.err.println("[lyrics-bridge] Noctalia 推送失败：$reason")
+    }
+
+    /** 上次推送失败原因（null 表示正常），用于抑制重复日志 */
+    private var lastFailure: String? = null
+
+    /**
+     * noctalia CLI 路径。
+     *
+     * Steam Linux Runtime 容器内宿主 /usr 不可见，宿主根挂载在 /run/host；
+     * 优先使用容器可执行的绝对路径，再退回 PATH 查找。
+     */
+    private val noctaliaCommand: String by lazy {
+        val containerPath = java.nio.file.Path.of("/run/host/usr/bin/noctalia")
+        val hostPath = java.nio.file.Path.of("/usr/bin/noctalia")
+        when {
+            java.nio.file.Files.isExecutable(containerPath) -> containerPath.toString()
+            java.nio.file.Files.isExecutable(hostPath) -> hostPath.toString()
+            else -> "noctalia"
         }
     }
 }

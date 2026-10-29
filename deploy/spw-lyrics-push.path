@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Salt Player lyrics bridge outbox
+
+[Path]
+# 插件在容器内原子替换该文件；systemd 监视文件变化后触发 service
+PathChanged=%h/.cache/salt-player-spw-bridge/push.out
+
+[Install]
+WantedBy=default.target
