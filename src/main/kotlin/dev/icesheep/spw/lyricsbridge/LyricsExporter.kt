@@ -29,7 +29,7 @@ import java.util.concurrent.RejectedExecutionException
 internal object LyricsExporter {
 
     /** 与 build.gradle.kts 的 PluginVersion 保持一致 */
-    private const val PLUGIN_VERSION = "1.0.0"
+    private const val PLUGIN_VERSION = "1.1.0"
 
     private val lock = Any()
 

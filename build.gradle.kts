@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "dev.icesheep.spw"
-version = "1.0.0"
+version = "1.1.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -39,7 +39,7 @@ dependencies {
 spmod {
     PluginClass = "dev.icesheep.spw.lyricsbridge.MainPlugin"
     PluginId = "dev.icesheep.spw.lyricsbridge"
-    PluginVersion = "1.0.0"
+    PluginVersion = "1.1.0"
     PluginProvider = "ice_sheep"
     PluginName = "歌词桥"
     PluginDescription = "导出当前歌曲歌词时间轴为本地 JSON 文件，供外部组件读取"

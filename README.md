@@ -84,7 +84,7 @@ systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 
 ```json
 {
   "writtenAt": 1769000000000,
-  "plugin": "spw-lyrics-bridge 1.0.0",
+  "plugin": "spw-lyrics-bridge 1.1.0",
   "title": "One Last Kiss",
   "artist": "宇多田ヒカル",
   "durationMs": 252027,
@@ -111,7 +111,7 @@ systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 
 ./gradlew plugin
 ```
 
-产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.0.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
+产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.1.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
 
 ## 宿主要求
 
