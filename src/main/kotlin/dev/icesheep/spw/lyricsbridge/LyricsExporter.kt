@@ -29,7 +29,7 @@ import java.util.concurrent.RejectedExecutionException
 internal object LyricsExporter {
 
     /** 与 build.gradle.kts 的 PluginVersion 保持一致 */
-    private const val PLUGIN_VERSION = "1.1.0"
+    private const val PLUGIN_VERSION = "1.2.0"
 
     private val lock = Any()
 
@@ -118,6 +118,12 @@ internal object LyricsExporter {
                 writeAtomically(buildJson(snapshot, title, artist, durationMs))
             } catch (e: Exception) {
                 // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
+            }
+            // 为 Media Lyrics 写行级 LRC（本地源是其第一优先级）
+            try {
+                LrcWriter.write(title, artist, snapshot)
+            } catch (e: Exception) {
+                // LRC 写出失败不影响其他导出
             }
             // 歌词加载完成即推 Noctalia Lyrics（external 源在等这条推送）
             if (noctaliaPushEnabled) {

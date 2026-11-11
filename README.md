@@ -79,12 +79,40 @@ systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 
 
 推送调试：`noctalia msg plugin h465855hgg/lyrics:service all push-state '<json>'` 可直接手工验证 Lyrics 端是否正常。
 
+## 搭配 Media Lyrics（可点击的歌词面板）
+
+[Media Lyrics](https://noctalia.dev/plugins/community/media-lyrics)（`tranzem/media-lyrics`）提供可点击打开的歌词面板：点击状态栏 chip 打开面板，内含卡拉OK carousel（9/12/16 行）、封面、可拖动进度条与播放控制。它直接轮询 MPRIS，且**本地 LRC 是第一歌词源**——本插件会把当前曲目写成 LRC 到它的本地目录，无需任何 IPC。
+
+### 安装与配置
+
+1. 依赖仅 `busctl`（systemd 自带）与 `curl`；无需 playerctl/python
+2. Noctalia 设置 → 插件 → 社区源启用 `tranzem/media-lyrics`
+3. 把它的 `now-playing` bar widget 加到状态栏：**左键点击 chip 打开歌词面板**（右键播放/暂停，中键打开该 widget 设置）
+4. 歌词无需配置：本插件写出的文件位于其默认 `local_lyrics_dir`（`~/.local/share/media-lyrics`），命名与它的查找规则一致（`<artist> - <title>.lrc` 与 `<title>.lrc` 两个候选都写）
+
+### 与 Lyrics（h465855hgg/lyrics）的取舍
+
+| 能力 | Media Lyrics | Lyrics（h465855hgg） |
+| --- | --- | --- |
+| 点击打开歌词面板 | ✅ 完整面板（卡拉OK + 封面 + 可拖进度） | ❌（左键仅在 `toggle` 模式切换视图） |
+| 状态栏逐字卡拉OK | ❌ chip 只显示当前行（`show_lyric_line`） | ✅ 逐字高亮（依赖本插件推送 `chars`） |
+| 歌词来源 | ✅ 本地 LRC（行级） | ✅ external 推送（逐字） |
+| 运行时依赖 | busctl + curl | playerctl + python3 |
+
+两者可同时安装，但建议只保留一个以避免状态栏重复；切换时停用另一个并移除其 bar widget。
+
+> LRC 只承载行级时间，Media Lyrics 对本地源按行同步；逐字高亮仅在 Lyrics（h465855hgg）的 external 推送链路可用。
+
+### 首次播放的时序
+
+Media Lyrics 换曲后先查本地文件（150ms 轮询）；本插件在歌词加载完成后立即写 LRC。本地歌词通常先到；若首次播放时其查询早于写入，本曲可能显示网络结果或无歌词，**重新播放该曲即命中本地 LRC**。
+
 ## 输出文件契约
 
 ```json
 {
   "writtenAt": 1769000000000,
-  "plugin": "spw-lyrics-bridge 1.1.0",
+  "plugin": "spw-lyrics-bridge 1.2.0",
   "title": "One Last Kiss",
   "artist": "宇多田ヒカル",
   "durationMs": 252027,
@@ -111,7 +139,7 @@ systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 
 ./gradlew plugin
 ```
 
-产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.1.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
+产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.2.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
 
 ## 宿主要求
 
