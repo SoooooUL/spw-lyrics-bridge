@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "dev.icesheep.spw"
-version = "1.2.0"
+version = "1.2.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -39,10 +39,11 @@ dependencies {
 spmod {
     PluginClass = "dev.icesheep.spw.lyricsbridge.MainPlugin"
     PluginId = "dev.icesheep.spw.lyricsbridge"
-    PluginVersion = "1.2.0"
+    PluginVersion = "1.2.1"
     PluginProvider = "ice_sheep"
     PluginName = "歌词桥"
     PluginDescription = "导出当前歌曲歌词时间轴为本地 JSON 文件，供外部组件读取"
+    PluginOpenSourceUrl = "https://github.com/SoooooUL/spw-lyrics-bridge"
     PluginHasConfig = true
     // 仅需读取曲库（当前歌曲元数据）；不申请写库与 Hook 权限
     PluginPermissions = listOf(PluginPermission.LIBRARY_READ)

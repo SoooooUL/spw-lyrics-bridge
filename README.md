@@ -112,7 +112,7 @@ Media Lyrics 换曲后先查本地文件（150ms 轮询）；本插件在歌词�
 ```json
 {
   "writtenAt": 1769000000000,
-  "plugin": "spw-lyrics-bridge 1.2.0",
+  "plugin": "spw-lyrics-bridge 1.2.1",
   "title": "One Last Kiss",
   "artist": "宇多田ヒカル",
   "durationMs": 252027,
@@ -139,7 +139,7 @@ Media Lyrics 换曲后先查本地文件（150ms 轮询）；本插件在歌词�
 ./gradlew plugin
 ```
 
-产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.2.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
+产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.2.1.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
 
 ## 宿主要求
 

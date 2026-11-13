@@ -29,12 +29,16 @@ import java.util.concurrent.RejectedExecutionException
 internal object LyricsExporter {
 
     /** 与 build.gradle.kts 的 PluginVersion 保持一致 */
-    private const val PLUGIN_VERSION = "1.2.0"
+    private const val PLUGIN_VERSION = "1.2.1"
 
     private val lock = Any()
 
     @Volatile
     private var executor: ExecutorService? = null
+
+    /** 启用代次：ensureStarted 时递增，旧执行器的任务据此丢弃 */
+    @Volatile
+    private var generation = 0L
 
     /** 最近一次已知的播放位置（毫秒）与播放状态（null=尚未收到状态事件） */
     @Volatile
@@ -69,7 +73,9 @@ internal object LyricsExporter {
     fun ensureStarted() {
         synchronized(lock) {
             if (executor?.isShutdown == false) return
-            Files.createDirectories(cacheDir)
+            // 每次启用递增代次：旧执行器里未完成的任务不得覆盖新状态
+            generation++
+            // 目录由首次写盘在后台线程创建，start() 不在界面线程做文件 IO
             executor = Executors.newSingleThreadExecutor { runnable ->
                 Thread(runnable, "spw-lyrics-bridge-writer").apply { isDaemon = true }
             }
@@ -140,8 +146,13 @@ internal object LyricsExporter {
      * stop() 竞态导致的拒绝静默忽略。
      */
     private fun submit(task: () -> Unit) {
+        val gen = generation
         try {
-            executor?.execute(task)
+            executor?.execute {
+                // 停用后重新启用会产生新代次；旧任务的产物不再有效
+                if (gen != generation) return@execute
+                task()
+            }
         } catch (rejected: RejectedExecutionException) {
             // 线程已关闭：丢弃本次任务，重新启用后宿主会重放歌词补上
         }
