@@ -23,14 +23,15 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
     /** 配置变更监听：开关即时生效，无需重启插件 */
     private val configListener = Consumer<ConfigHelper> { config ->
         LyricsExporter.setNoctaliaPushEnabled(config.get("push.noctalia", true))
+        LyricsExporter.setCreditFilterEnabled(config.get("filter.credits", true))
     }
 
     override fun start() {
         LyricsExporter.ensureStarted()
         // 界面保存会自动写文件；启动时读一次初值并监听后续变化
-        LyricsExporter.setNoctaliaPushEnabled(
-            configManager.getConfig().get("push.noctalia", true)
-        )
+        val config = configManager.getConfig()
+        LyricsExporter.setNoctaliaPushEnabled(config.get("push.noctalia", true))
+        LyricsExporter.setCreditFilterEnabled(config.get("filter.credits", true))
         configManager.addConfigChangeListener(configListener)
         WorkshopApi.ui.toast("歌词桥已启用", WorkshopApi.Ui.ToastType.Success)
     }

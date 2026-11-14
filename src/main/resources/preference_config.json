@@ -10,6 +10,13 @@
           "title": "推送歌词到 Noctalia Lyrics",
           "summary": "换曲/播放事件时通过 noctalia msg 向 Noctalia 的 Lyrics 插件（external 源）推送歌词。未使用该插件时可关闭，避免周期性进程调用",
           "default_value": true
+        },
+        {
+          "type": "switch",
+          "key": "filter.credits",
+          "title": "过滤版权/制作信息行",
+          "summary": "从导出的歌词中移除作词、作曲、出品、发行、版权声明等制作信息行（规则参考 Noctalia Lyrics）。只影响本插件导出的数据，不改变 Salt Player 自身显示",
+          "default_value": true
         }
       ]
     }
