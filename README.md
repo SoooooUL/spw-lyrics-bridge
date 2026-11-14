@@ -107,12 +107,22 @@ systemctl --user disable --now spw-lyrics-push.path   # 卸载（再删除 unit 
 
 Media Lyrics 换曲后先查本地文件（150ms 轮询）；本插件在歌词加载完成后立即写 LRC。本地歌词通常先到；若首次播放时其查询早于写入，本曲可能显示网络结果或无歌词，**重新播放该曲即命中本地 LRC**。
 
+## 过滤版权/制作信息行
+
+默认开启（Salt Player → 模组管理 → 歌词桥 → 配置 → 「过滤版权/制作信息行」）。规则移植自 Noctalia Lyrics 并补充了双语格式：
+
+- 制作信息标签行：作词/作曲/编曲/制作人/出品/发行/版权/混音/母带/录音…（中英日韩及拉丁语系），含 `作曲 Composer：…`、`出品 Produced by：…`、`Lyrics by: …` 等形式
+- 纯音乐占位："纯音乐，请欣赏"、"instrumental"
+- 纯装饰符号行：`♪♫~-…`
+
+只影响本插件导出的 `lyrics.json`、LRC 与 Noctalia 推送，**不改变 Salt Player 自身的歌词显示**。过滤后若一行不剩（防御），保留原列表。
+
 ## 输出文件契约
 
 ```json
 {
   "writtenAt": 1769000000000,
-  "plugin": "spw-lyrics-bridge 1.2.1",
+  "plugin": "spw-lyrics-bridge 1.3.0",
   "title": "One Last Kiss",
   "artist": "宇多田ヒカル",
   "durationMs": 252027,
@@ -139,7 +149,7 @@ Media Lyrics 换曲后先查本地文件（150ms 轮询）；本插件在歌词�
 ./gradlew plugin
 ```
 
-产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.2.1.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
+产物：`build/libs/plugin-dev.icesheep.spw.lyricsbridge-1.3.0.spmod`。在 Salt Player 中本地导入并启用，授予「曲库读取」权限。
 
 ## 宿主要求
 

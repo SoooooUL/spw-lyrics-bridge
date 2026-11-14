@@ -29,7 +29,7 @@ import java.util.concurrent.RejectedExecutionException
 internal object LyricsExporter {
 
     /** 与 build.gradle.kts 的 PluginVersion 保持一致 */
-    private const val PLUGIN_VERSION = "1.2.1"
+    private const val PLUGIN_VERSION = "1.3.0"
 
     private val lock = Any()
 
@@ -56,6 +56,14 @@ internal object LyricsExporter {
 
     fun setNoctaliaPushEnabled(enabled: Boolean) {
         noctaliaPushEnabled = enabled
+    }
+
+    /** 过滤版权/制作信息行（配置界面实时控制） */
+    @Volatile
+    private var creditFilterEnabled = true
+
+    fun setCreditFilterEnabled(enabled: Boolean) {
+        creditFilterEnabled = enabled
     }
 
     /** 缓存目录：遵循 XDG 规范，跨用户目录可写 */
@@ -120,14 +128,16 @@ internal object LyricsExporter {
             } catch (e: Exception) {
                 // 元数据查询的其他失败同样降级，不阻断歌词导出
             }
+            // 过滤版权/制作信息行；只影响本插件输出，不改变宿主显示
+            val effective = if (creditFilterEnabled) CreditFilter.filter(snapshot) else snapshot
             try {
-                writeAtomically(buildJson(snapshot, title, artist, durationMs))
+                writeAtomically(buildJson(effective, title, artist, durationMs))
             } catch (e: Exception) {
                 // 写盘失败不能影响宿主：静默丢弃，换曲时会再次触发导出
             }
             // 为 Media Lyrics 写行级 LRC（本地源是其第一优先级）
             try {
-                LrcWriter.write(title, artist, snapshot)
+                LrcWriter.write(title, artist, effective)
             } catch (e: Exception) {
                 // LRC 写出失败不影响其他导出
             }
@@ -135,7 +145,7 @@ internal object LyricsExporter {
             if (noctaliaPushEnabled) {
                 NoctaliaPusher.pushFull(
                     title, artist, album, durationMs,
-                    snapshot, lastPositionMs, lastPlaying
+                    effective, lastPositionMs, lastPlaying
                 )
             }
         }
